@@ -3,6 +3,7 @@ package couchbase
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"net/url"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"unsafe"
@@ -27,6 +29,9 @@ import (
 var MaxIdleConnsPerHost = 256
 var HTTPTransport = &http.Transport{MaxIdleConnsPerHost: MaxIdleConnsPerHost}
 var HTTPClient = &http.Client{Transport: HTTPTransport}
+var ClientNodeCertLocation = ""
+var ClientNodeKeyLocation = ""
+var RootCaLocation = ""
 
 // PoolSize is the size of each connection pool (per host).
 var PoolSize = 64
@@ -507,6 +512,36 @@ func isHttpConnError(err error) bool {
 		strings.Contains(estr, "connection reset")
 }
 
+func buildTLSConfig(skipVerify bool) (*tls.Config, error) {
+	var cert tls.Certificate
+	var err error = nil
+	if ClientNodeCertLocation != "" &&
+		ClientNodeKeyLocation != "" {
+		cert, err = tls.LoadX509KeyPair(ClientNodeCertLocation,
+			ClientNodeKeyLocation)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	config := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	if skipVerify {
+		config.InsecureSkipVerify = true
+	} else if RootCaLocation != "" {
+		caCert, err := ioutil.ReadFile(RootCaLocation)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		config.RootCAs = caCertPool
+	}
+	config.BuildNameToCertificate()
+	return config, nil
+}
+
 var client *http.Client
 
 func doHTTPRequest(req *http.Request) (*http.Response, error) {
@@ -519,11 +554,11 @@ func doHTTPRequest(req *http.Request) (*http.Response, error) {
 	// we need a client that ignores certificate errors, since we self-sign
 	// our certs
 	if client == nil && req.URL.Scheme == "https" {
-		if skipVerify {
-			tr = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
+		c, err := buildTLSConfig(skipVerify)
+		if err != nil {
+			return nil, err
 		}
+		tr.TLSClientConfig = c
 		client = &http.Client{Transport: tr}
 	} else if client == nil {
 		client = HTTPClient
@@ -859,6 +894,23 @@ func (b *Bucket) Refresh() error {
 		}
 	}
 
+	ssl := false
+	if pool.client.BaseURL.Scheme == "https" {
+		ssl = true
+		ps, _ := pool.client.GetPoolServices("default")
+		portmap := make(map[int]int)
+		for _, v := range ps.NodesExt {
+			portmap[v.Services["kv"]] = v.Services["kvSSL"]
+		}
+		for i, server := range tmpb.VBSMJson.ServerList {
+			s := strings.Split(server, ":")
+			val, _ := strconv.Atoi(s[1])
+			sslport := portmap[val]
+			k := s[0] + ":" + strconv.Itoa(sslport)
+			tmpb.VBSMJson.ServerList[i] = k
+		}
+	}
+
 	newcps := make([]*connectionPool, len(tmpb.VBSMJson.ServerList))
 	for i := range newcps {
 
@@ -870,13 +922,18 @@ func (b *Bucket) Refresh() error {
 			continue
 		}
 
+		poolFun := newConnectionPool
+		if ssl {
+			poolFun = newConnectionPoolSsl
+		}
+
 		if b.ah != nil {
-			newcps[i] = newConnectionPool(
+			newcps[i] = poolFun(
 				tmpb.VBSMJson.ServerList[i],
 				b.ah, PoolSize, PoolOverflow)
 
 		} else {
-			newcps[i] = newConnectionPool(
+			newcps[i] = poolFun(
 				tmpb.VBSMJson.ServerList[i],
 				b.authHandler(true /* bucket already locked */), PoolSize, PoolOverflow)
 		}

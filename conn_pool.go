@@ -30,11 +30,13 @@ var ConnPoolTimeout = time.Hour * 24 * 30
 // one.
 var ConnPoolAvailWaitTime = time.Millisecond
 
+type ConnectFun func(host, port string) (*memcached.Client, error)
 type connectionPool struct {
 	host        string
-	mkConn      func(host string, ah AuthHandler) (*memcached.Client, error)
+	mkConn      func(host string, ah AuthHandler, cf ConnectFun) (*memcached.Client, error)
 	auth        AuthHandler
 	connections chan *memcached.Client
+	connectFun  ConnectFun
 	createsem   chan bool
 	inUse       bool
 }
@@ -45,15 +47,32 @@ func newConnectionPool(host string, ah AuthHandler, poolSize, poolOverflow int) 
 		connections: make(chan *memcached.Client, poolSize),
 		createsem:   make(chan bool, poolSize+poolOverflow),
 		mkConn:      defaultMkConn,
+		connectFun:  memcached.Connect,
 		auth:        ah,
 	}
+}
+
+func newConnectionPoolSsl(host string, ah AuthHandler, poolSize, poolOverflow int) *connectionPool {
+	return &connectionPool{
+		host:        host,
+		connections: make(chan *memcached.Client, poolSize),
+		createsem:   make(chan bool, poolSize+poolOverflow),
+		mkConn:      defaultMkConn,
+		connectFun:  connectSSL,
+		auth:        ah,
+	}
+}
+
+func connectSSL(host, port string) (*memcached.Client, error) {
+	tlsconfig, _ := buildTLSConfig(skipVerify)
+	return memcached.ConnectSSL(host, port, tlsconfig)
 }
 
 // ConnPoolTimeout is notified whenever connections are acquired from a pool.
 var ConnPoolCallback func(host string, source string, start time.Time, err error)
 
-func defaultMkConn(host string, ah AuthHandler) (*memcached.Client, error) {
-	conn, err := memcached.Connect("tcp", host)
+func defaultMkConn(host string, ah AuthHandler, cf ConnectFun) (*memcached.Client, error) {
+	conn, err := cf("tcp", host)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +181,7 @@ func (cp *connectionPool) GetWithTimeout(d time.Duration) (rv *memcached.Client,
 			// Build a connection if we can't get a real one.
 			// This can potentially be an overflow connection, or
 			// a pooled connection.
-			rv, err := cp.mkConn(cp.host, cp.auth)
+			rv, err := cp.mkConn(cp.host, cp.auth, cp.connectFun)
 			if err != nil {
 				// On error, release our create hold
 				<-cp.createsem
