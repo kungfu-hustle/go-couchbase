@@ -21,8 +21,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/couchbase/gomemcached"        // package name is 'gomemcached'
-	"github.com/couchbase/gomemcached/client" // package name is 'memcached'
+	"github.com/kungfu-hustle/gomemcached"        // package name is 'gomemcached'
+	"github.com/kungfu-hustle/gomemcached/client" // package name is 'memcached'
 )
 
 // HTTPClient to use for REST and view operations.
@@ -137,7 +137,7 @@ type Node struct {
 	MemoryTotal          float64            `json:"memoryTotal"`
 	OS                   string             `json:"os"`
 	Ports                map[string]int     `json:"ports"`
-	Services	     []string		`json:"services"`
+	Services             []string           `json:"services"`
 	Status               string             `json:"status"`
 	Uptime               int                `json:"uptime,string"`
 	Version              string             `json:"version"`

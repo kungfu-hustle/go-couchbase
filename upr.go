@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"fmt"
-	"github.com/couchbase/gomemcached"
-	"github.com/couchbase/gomemcached/client"
 	"github.com/couchbase/goutils/logging"
+	"github.com/kungfu-hustle/gomemcached"
+	"github.com/kungfu-hustle/gomemcached/client"
 )
 
 // A UprFeed streams mutation events from a bucket.

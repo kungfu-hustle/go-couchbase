@@ -1,8 +1,8 @@
 package couchbase
 
 import (
-	"github.com/couchbase/gomemcached/client"
 	"github.com/couchbase/goutils/logging"
+	"github.com/kungfu-hustle/gomemcached/client"
 	"sync"
 	"time"
 )

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/couchbase/go-couchbase"
+import "github.com/kungfu-hustle/go-couchbase"
 
 func main() {
 	couchbase.SetSkipVerify(true)

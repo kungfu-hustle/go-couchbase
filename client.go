@@ -35,9 +35,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/couchbase/gomemcached"
-	"github.com/couchbase/gomemcached/client" // package name is 'memcached'
 	"github.com/couchbase/goutils/logging"
+	"github.com/kungfu-hustle/gomemcached"
+	"github.com/kungfu-hustle/gomemcached/client" // package name is 'memcached'
 )
 
 // Mutation Token

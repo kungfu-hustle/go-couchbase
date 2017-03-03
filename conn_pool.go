@@ -5,8 +5,8 @@ import (
 	"github.com/couchbase/goutils/logging"
 	"time"
 
-	"github.com/couchbase/gomemcached"
-	"github.com/couchbase/gomemcached/client"
+	"github.com/kungfu-hustle/gomemcached"
+	"github.com/kungfu-hustle/gomemcached/client"
 )
 
 // GenericMcdAuthHandler is a kind of AuthHandler that performs
